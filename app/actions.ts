@@ -2,11 +2,15 @@
 
 import { db } from "../db";
 import { notes } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 
 export async function createNote(formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
   const title = formData.get("title") as string;
   const content = formData.get("content") as string;
   const tagsString = formData.get("tags") as string;
@@ -14,6 +18,7 @@ export async function createNote(formData: FormData) {
   const tags = tagsString ? tagsString.split(",").map(t => t.trim()).filter(Boolean) : [];
 
   await db.insert(notes).values({
+    userId: session.userId,
     title,
     content,
     tags,
@@ -24,6 +29,9 @@ export async function createNote(formData: FormData) {
 }
 
 export async function updateNote(id: number, formData: FormData) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
   const title = formData.get("title") as string;
   const content = formData.get("content") as string;
   const tagsString = formData.get("tags") as string;
@@ -32,7 +40,7 @@ export async function updateNote(id: number, formData: FormData) {
 
   await db.update(notes)
     .set({ title, content, tags, updatedAt: new Date() })
-    .where(eq(notes.id, id));
+    .where(and(eq(notes.id, id), eq(notes.userId, session.userId)));
 
   revalidatePath("/");
   revalidatePath(`/notes/${id}`);
@@ -40,7 +48,10 @@ export async function updateNote(id: number, formData: FormData) {
 }
 
 export async function deleteNote(id: number) {
-  await db.delete(notes).where(eq(notes.id, id));
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, session.userId)));
   
   revalidatePath("/");
   revalidatePath(`/notes/${id}`);

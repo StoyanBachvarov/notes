@@ -1,16 +1,20 @@
 import { db } from "../db";
 import { notes } from "../db/schema";
-import { and, desc, ilike, sql } from "drizzle-orm";
+import { and, desc, ilike, sql, eq } from "drizzle-orm";
 import Link from "next/link";
+import { getSession } from "@/lib/auth";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+  const session = await getSession();
+  if (!session) return null; // Handled by middleware
+
   const params = await searchParams;
   const search = params.search || "";
   const tag = params.tag || "";
   const page = Number(params.page) || 1;
   const limit = 5;
 
-  const conditions = [];
+  const conditions = [eq(notes.userId, session.userId)];
   if (search) {
     conditions.push(
       sql`(${ilike(notes.title, `%${search}%`)} OR ${ilike(notes.content, `%${search}%`)})`
@@ -20,7 +24,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
     conditions.push(sql`${tag} = ANY(${notes.tags})`);
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)` })
